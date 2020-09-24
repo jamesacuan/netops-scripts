@@ -4,28 +4,37 @@ title SENCOR-WFH Network Diagnostics
 mode con: cols=100 lines=29
 
 rem initialize
-set incr=1
+set vpn1A=203.147.107.250
+set vpn1B=210.176.35.185
+set vpn1Aname=telstra_sencor
+set vpn1Bname=telstra_border
+set vpn1Adomain=VPN.SENCOR.NET
+
+set vpn2A=116.50.227.91
+set vpn2B=116.50.227.65
+set vpn2Aname=etpi_sencor
+set vpn2Bname=etpi_border
+set vpn2Adomain=ETPI-V.SENCOR.NET
+
 set domain=sencor.net
 set noddomain=sencor-mnl.net
 set server=postoffice
 set googDNS=8.8.8.8
-set ipvpnT=203.147.107.250
-set ipvpnE=116.50.227.91
-set ipvpnTborder=210.176.35.185
-set ipvpnEborder=116.50.227.65
-set logonserver=192.168.1.61
-set ipvpnTname=telstra_sencor
-set ipvpnEname=etpi_sencor
-set ipvpnTbordername=telstra_border
-set ipvpnEbordername=etpi_border
-set syncdir=%userprofile%\.sencor
-set tempdir=%syncdir%\temp
-set redo=false
 set spdydomain=www.speedtest.net
 set spdyconfig=speedtest-config
 set spdyserver=speedtest-servers
+set logonserver=192.168.1.61
+set syncdir=%userprofile%\.sencor
+set tempdir=%syncdir%\temp
+set redo=false
+set incr=1
+set option=%1
 set customdate=%date:~10,4%%date:~4,2%%date:~7,2%
+set programname=syncore
 
+if not [%option%]==[] goto :OPTIONS
+
+:START
 for %%x in (%googDNS% %logonserver%) do (
     ping %%x -n 1 -w 1000
     cls
@@ -34,6 +43,9 @@ for %%x in (%googDNS% %logonserver%) do (
 
 if not exist %tempdir% mkdir %tempdir%
 if exist %userprofile%\.sencor\info.cmd GOTO :RELOADINFO
+
+openfiles > NUL 2>&1 
+if NOT %errorlevel% EQU 0 goto :NOTADMIN
 
 :LOGIN
 cls
@@ -90,14 +102,74 @@ echo.
 echo	You're not connected to the Internet or to GlobalProtect.
 echo.
 echo	Kindly check your connection settings and try running
-echo	this app again. Thanks.
-echo.
-echo.
+echo	this utility tool again. Thanks.
 echo.
 echo.
 pause
 goto :end
 
+:NOTADMIN
+echo.
+echo.
+echo	You are not running as administrator.
+echo.
+echo	Right-click on this program and select Run as administrator 
+echo	to run this program in elevated mode.
+echo.
+echo.
+pause
+goto :end
+
+:OPTIONS
+if %option%==--uninstall (
+    openfiles > NUL 2>&1 
+    if NOT %errorlevel% EQU 0 goto :NOTADMIN
+    cls
+    echo.
+    ECHO    UNINSTALLING...
+    echo.
+    del %windir%\System32\%programname%.bat
+    timeout /t 2
+    cls
+    echo.
+    echo.
+    echo	%programname% has been uninstalled.
+    echo.
+    echo	Thanks for using!
+    echo.
+    echo.
+    timeout /t 5
+    goto :end
+)
+if %option%==--clear (
+    cls
+    echo.
+    ECHO    Clearing Saved Data...
+    echo.
+    del %syncdir%\info.cmd
+    timeout /t 2
+    cls
+    echo.
+    ECHO    Data cleared. Please wait as we redirect you to
+    echo    registration screen.
+    echo.
+    timeout /t 5
+    goto :start
+)
+cls
+echo.
+ECHO INVALID OPTION
+echo.
+echo Usage: %programname% [--uninstall  OR  --clear]
+echo.
+echo Options:
+echo    --uninstall     Delete all saved data and files associated with
+echo                    this program. (Should be Run as Administrator)
+echo    --clear         Command to clear saved data and redo registration
+echo                    process.
+echo.
+pause
+goto :end
 
 :SAVINGINFO
 @echo @ECHO OFF > "%syncdir%\info.cmd" 
@@ -109,6 +181,7 @@ goto :end
 @echo set ISP=%ISP% >> "%syncdir%\info.cmd"
 @echo set DATEREGISTERED=%DATE% %TIME% >> "%syncdir%\info.cmd"
 echo.
+copy %~dp0%~n0%~x0 %windir%\System32\%programname%.bat >NUL
 echo saved.
 pause
 
@@ -127,19 +200,46 @@ for %%x in (vbs txt json png) do (
 
 if exist "%syncdir%\pack*.zip" (
     rem redo
-    set redo=true
-    call "%syncdir%\tmpPend.cmd"
-    
+
+    cd %syncdir%
+    for /f %%A in ('dir pack*.zip ^| find "File(s)"') do set redocnt=%%A
+
+    set redo=true  
     set xdate=""
     set xtime=""
     set ydate=""
     set ytime=""
     
-    GOTO :DIAGSTEP7
+    setlocal ENABLEDELAYEDEXPANSION
+    
+    set /a c=0
+    for /r %%Y in ("pack*.zip") do (
+        FOR %%i IN ("%%Y") DO (
+            set filename=%%~ni
+            set fileextn=%%~xi
+        ) 
+        set redoyear=!filename:~5,4!
+        set redomonth=!filename:~9,2!
+        set redoday=!filename:~11,2!
+        set redovsn=!filename:~14,2!
+        set redoname=!redoyear!!redomonth!!redoday!-!redovsn!
+        set /a c=c+1
+
+        goto :DIAGSTEP7
+        pause
+
+    )
+
+    pause
+    endlocal
+    
+
+    rem GOTO :DIAGSTEP7 temp
+    goto :eof
 ) ELSE (
     rem Start Fresh
     set redo=false
-    if exist "%syncdir%\tmpPend-*.cmd" del "%syncdir%\tmpPend-*.cmd"
+    rem if exist "%syncdir%\tmpPend-*.cmd" del "%syncdir%\tmpPend-*.cmd"
     if exist "%syncdir%\tmpBody-*.txt" del "%syncdir%\tmpBody-*.txt"
     rem pause
     rem goto :DIAGSTEP6
@@ -160,8 +260,6 @@ IF !h! GTR 11 (SET /A "h-=12" & SET "ap=P" & IF "!h!"=="0" (SET "h=00") ELSE (IF
 set xdate=%z%-%d%-%y%
 set xtime=%h%:%m% %ap%M
 
-rem if exist "%syncdir%\temp.zip" del "%syncdir%\temp.zip"
-
 powershell -command "wget https://api.ipify.org/ -OutFile '%tempdir%/ip.txt'"
 set /p ipadd=<%userprofile%/.sencor/temp/ip.txt
 
@@ -170,16 +268,15 @@ set ytime=""
 set PANGPlog="%localappdata%\Palo Alto Networks\GlobalProtect\PanGPA.log"
 set count=0
 
-@echo @ECHO OFF > "%syncdir%\tmpPend-%id%.cmd
-@echo set PENDING_JOB=TRUE >> "%syncdir%\tmpPend-%id%.cmd"
-@echo set PENDING_DATETIME=%xdate% %xtime% >> "%syncdir%\tmpPend-%id%.cmd"
-echo.
+rem @echo @ECHO OFF > "%syncdir%\tmpPend-%id%.cmd
+rem @echo set PENDING_JOB=TRUE >> "%syncdir%\tmpPend-%id%.cmd"
+rem @echo set PENDING_DATETIME=%xdate% %xtime% >> "%syncdir%\tmpPend-%id%.cmd"
+rem echo.
 
 :DIAGBODY
 cls
-set horizontal=******************************************************************
 echo.
-echo %horizontal%
+echo ******************************************************************
 echo.
 echo    Welcome, %fullname%^^!
 echo.
@@ -189,7 +286,7 @@ echo    network diagnostic is complete.
 echo.
 echo    You may minimize this console and continue your work.   
 echo.
-echo %horizontal%
+echo ******************************************************************
 echo.
 if %redo%==false (
     echo    Time started: %xdate% %xtime%
@@ -201,15 +298,15 @@ echo    0. Information Gathering
 if %count%==0 GOTO :BUSY
 echo.
 echo    1. PING Test
-echo        a. vpn.sencor.net
+echo        a. %vpn1Adomain%
 if %count%==1 GOTO :BUSY
-echo        b. etpi-v.sencor.net
+echo        b. %vpn2Adomain%
 if %count%==2 GOTO :BUSY
 echo.
 echo    2. TRACEROUTE Test
-echo        a. vpn.sencor.net
+echo        a. %vpn1Adomain%
 if %count%==3 GOTO :BUSY
-echo        b. etpi-v.sencor.net
+echo        b. %vpn2Adomain%
 if %count%==4 GOTO :BUSY
 if %count%==5 GOTO :BUSY
 echo.
@@ -223,6 +320,7 @@ GOTO :DIAGSTEP7
 :BUSY
 echo.
 powershell write-host -foregroundcolor YELLOW "[%count%/7] Working... Please Wait."
+echo.
 rem powershell Write-Progress -Activity 'Network Diagnostics' -Status 'In progress' -PercentComplete ([math]::Round((%count%/7)*100))
 goto :DIAGSTEP%COUNT%
 
@@ -253,30 +351,30 @@ GOTO :DIAGBODY
 
 :DIAGSTEP1
 REM 1. PING / A. VPN
-powershell %ping% %ipvpnTborder% %ipvpnTbordername%
-powershell %ping% %ipvpnT% %ipvpnTname%
+powershell %ping% %vpn1B% %vpn1Bname%
+powershell %ping% %vpn1A% %vpn1Aname%
 set count=2
 GOTO :DIAGBODY
 
 :DIAGSTEP2
 REM 1. PING / B. ETPI
-powershell %ping% %ipvpnEborder% %ipvpnEbordername%
-powershell %ping% %ipvpnE% %ipvpnEname%
+powershell %ping% %vpn2B% %vpn2Bname%
+powershell %ping% %vpn2A% %vpn2Aname%
 del %ping%
 set count=3
 GOTO :DIAGBODY
 
 :DIAGSTEP3
 REM 2. TRACEROUTE / A. VPN
-tracert %ipvpnTborder% > "%tempdir%\tracert_%ipvpnTbordername%-%username%.txt"
-tracert %ipvpnT% > "%tempdir%\tracert_%ipvpnTname%-%username%.txt"
+tracert %vpn1B% > "%tempdir%\tracert_%vpn1Bname%-%username%.txt"
+tracert %vpn1A% > "%tempdir%\tracert_%vpn1Aname%-%username%.txt"
 set count=4
 GOTO :DIAGBODY
 
 :DIAGSTEP4
 REM 2. TRACEROUTE / B. ETPI
-tracert %ipvpnE% > "%tempdir%\tracert_%ipvpnEname%-%username%.txt"
-tracert %ipvpnEborder% > "%tempdir%\tracert_%ipvpnEbordername%-%username%.txt"
+tracert %vpn2A% > "%tempdir%\tracert_%vpn2Aname%-%username%.txt"
+tracert %vpn2B% > "%tempdir%\tracert_%vpn2Bname%-%username%.txt"
 set count=5
 GOTO :DIAGBODY
 
@@ -335,59 +433,60 @@ REM GENERATING REPORT
 
 type NUL > "%syncdir%\tmpbody-%id%.txt"
 set tmpbody="%syncdir%\tmpbody-%id%.txt"
-@echo Name: %FULLNAME% > %tmpbody%
-@echo Department: %DEPT% >> %tmpbody%
-@echo Group: %GROUP% >> %tmpbody%
-@echo Employee ID: %IDNO% >> %tmpbody%
-@echo. >> %tmpbody%
-@echo ISP: %ISP% >> %tmpbody%
-@echo IP:  %ipadd% >> %tmpbody%
-@echo. >> %tmpbody%
-@echo Started: %xdate% %xtime%>> %tmpbody%
-@echo Finished: %ydate% %ytime%>> %tmpbody%
+@echo >%tmpbody% Name: %FULLNAME%
+@echo >>%tmpbody% Department: %DEPT%
+@echo >>%tmpbody% Group: %GROUP%
+@echo >>%tmpbody% Employee ID: %IDNO%
+@echo. >>%tmpbody%
+@echo >>%tmpbody% ISP: %ISP%
+@echo >>%tmpbody% IP:  %ipadd%
+@echo. >>%tmpbody%
+@echo >>%tmpbody% Started: %xdate% %xtime%
+@echo >>%tmpbody% Finished: %ydate% %ytime%
 rem important results to body
 @echo. >> %tmpbody%
 @echo. >> %tmpbody%
-@echo PING TO VPN.SENCOR.NET >> %tmpbody% 
+@echo PING TO %vpn1Adomain% >> %tmpbody% 
+@echo >> %tmpbody% ----------------------------------
+type "%tempdir%\ping_%vpn1Aname%-%username%.txt" >> %tmpbody%
+@echo. >> %tmpbody%
+@echo. >> %tmpbody%
+@echo. >> %tmpbody%
+@echo PING TO %vpn2Adomain% >> %tmpbody% 
+@echo >> %tmpbody% ----------------------------------
+type "%tempdir%\ping_%vpn2Aname%-%username%.txt" >> %tmpbody%
+@echo. >> %tmpbody%
+@echo. >> %tmpbody%
+@echo >> %tmpbody% TRACEROUTE TO %vpn1Adomain%
 @echo ---------------------------------- >> %tmpbody%
-type "%tempdir%\ping_telstra_sencor-%username%.txt" >> %tmpbody%
+type "%tempdir%\tracert_%vpn1Aname%-%username%.txt" >> %tmpbody%
 @echo. >> %tmpbody%
 @echo. >> %tmpbody%
 @echo. >> %tmpbody%
-@echo PING TO ETPI-V.SENCOR.NET >> %tmpbody% 
+@echo >> %tmpbody% TRACEROUTE TO %vpn2Adomain%
 @echo ---------------------------------- >> %tmpbody%
-type "%tempdir%\ping_etpi_sencor-%username%.txt" >> %tmpbody%
-@echo. >> %tmpbody%
-@echo. >> %tmpbody%
-@echo TRACEROUTE TO VPN.SENCOR.NET >> %tmpbody% 
-@echo ---------------------------------- >> %tmpbody%
-type "%tempdir%\tracert_telstra_sencor-%username%.txt" >> %tmpbody%
+type "%tempdir%\tracert_%vpn2Aname%-%username%.txt" >> %tmpbody%
 @echo. >> %tmpbody%
 @echo. >> %tmpbody%
 @echo. >> %tmpbody%
-@echo TRACEROUTE TO ETPI-V.SENCOR.NET >> %tmpbody% 
-@echo ---------------------------------- >> %tmpbody%
-type "%tempdir%\tracert_etpi_sencor-%username%.txt" >> %tmpbody%
-@echo. >> %tmpbody%
-@echo. >> %tmpbody%
-@echo. >> %tmpbody%
-@echo ADDITIONAL INFORMATION >> %tmpbody% 
-@echo ---------------------------------- >> %tmpbody%
+@echo >> %tmpbody% ADDITIONAL INFORMATION
+@echo >> %tmpbody% ----------------------------------
 type "%tempdir%\netdetails-%username%.json" >> %tmpbody%
 del "%tempdir%\netdetails-%username%.json"
 
 rem zipping report
-
-echo Set objArgs = WScript.Arguments > "%syncdir%\_zipIt.vbs"
-echo InputFolder = objArgs(0) >> "%syncdir%\_zipIt.vbs"
-echo ZipFile = objArgs(1) >> "%syncdir%\_zipIt.vbs"
-echo CreateObject("Scripting.FileSystemObject").CreateTextFile(ZipFile, True).Write "PK" ^& Chr(5) ^& Chr(6) ^& String(18, vbNullChar) >> "%syncdir%\_zipIt.vbs"
-echo Set objShell = CreateObject("Shell.Application") >> "%syncdir%\_zipIt.vbs"
-echo Set source = objShell.NameSpace(InputFolder).Items >> "%syncdir%\_zipIt.vbs"
-echo objShell.NameSpace(ZipFile).CopyHere(source) >> "%syncdir%\_zipIt.vbs"
-echo wScript.Sleep 2000 >> "%syncdir%\_zipIt.vbs"
-CScript "%syncdir%\_zipIt.vbs"  "%tempdir%"  "%syncdir%\pack-%id%.zip"
-del "%syncdir%\_zipIt.vbs"
+type NUL > "%syncdir%\_zipIt.vbs"
+set zipit="%syncdir%\_zipIt.vbs"
+echo >"%zipit%" Set objArgs = WScript.Arguments
+echo >> %zipit% InputFolder = objArgs(0)
+echo >> %zipit% ZipFile = objArgs(1)
+echo >> %zipit% CreateObject("Scripting.FileSystemObject").CreateTextFile(ZipFile, True).Write "PK" ^& Chr(5) ^& Chr(6) ^& String(18, vbNullChar)
+echo >> "%zipit%" Set objShell = CreateObject("Shell.Application")
+echo >> "%zipit%" Set source = objShell.NameSpace(InputFolder).Items
+echo >> %zipit% objShell.NameSpace(ZipFile).CopyHere(source)
+echo >> %zipit% wScript.Sleep 2000
+CScript %zipit% "%tempdir%" "%syncdir%\pack-%id%.zip"
+del %zipit%
 del "%tempdir%\*.txt"
 del "%tempdir%\*.json"
 del "%tempdir%\*.png"
@@ -403,20 +502,20 @@ set subj="SENCOR WFH NET DIAGNOSTICS - %username%"
 if %redo%==true (
     cls
     echo.
-    echo We found a pending job dated %PENDING_DATETIME%
+    echo We found %redocnt% pending job. We will attempt to send this first.
     echo.
     echo.
-    echo We will attempt to send this first.
-    echo.
+    powershell write-host -foregroundcolor YELLOW "[%c%/%redocnt%] Processing !filename!. Please Wait."
+    set id=!redoyear!!redomonth!!redoday!-!redovsn!
     if exist "%syncdir%\*.vbs" del "%syncdir%\*.vbs"
-    if exist "%syncdir%\tmpbody.txt" (
-        set tmpbody="%syncdir%\tmpbody.txt"
+    if exist "%syncdir%\tmpbody-!id!.txt" (
+        set tmpbody="%syncdir%\tmpbody-!id!.txt"
     ) else (
-        echo "old unset log" >> "%syncdir%\tmpbody.txt"
-        set tmpbody="%syncdir%\tmpbody.txt"
+        echo "This is an unsent log dated !redoyear!-!redomonth!-!redoday!" >> "%syncdir%\tmpbody-!id!.txt"
+        set tmpbody="%syncdir%\tmpbody-!id!.txt"
     )
     rem set count=5
-    pause
+    timeout /t 3
     rem goto :DIAGBODY
 )
 
@@ -429,7 +528,7 @@ if exist "%syncdir%\sent.txt" (
    echo "Logs have been sent to Datacomm (NOD). Thanks."
    echo.
    timeout /t 10
-   del "%syncdir%\*.txt"
+   del "%syncdir%\sent.txt"
    del "%syncdir%\*.vbs"
 ) else (
    cls
@@ -463,7 +562,11 @@ goto :EOF
 
 :createVBS
 set "vbsfile=%~1"
-set fileattach="%syncdir%\pack-%id%.zip"
+if not [!id!]==[] (
+    set fileattach="%syncdir%\pack-!id!.zip"
+    set id=!id!
+) else set fileattach="%syncdir%\pack-%id%.zip"
+
 del "%vbsfile%" 2>nul
 set cdoSchema=http://schemas.microsoft.com/cdo/configuration
 echo >>"%vbsfile%" Set objMail = CreateObject("CDO.Message")
@@ -490,7 +593,7 @@ echo. >>"%vbsfile%"
 echo >>"%vbsfile%" file="" 
 echo >>"%vbsfile%" If err.number = 0 then 
 echo >>"%vbsfile%"    file="%syncdir%\sent.txt"
-echo >>"%vbsfile%"    objFSO.DeleteFile("%syncdir%\tmpPend-%id%.cmd")
+rem echo >>"%vbsfile%"    objFSO.DeleteFile("%syncdir%\tmpPend-%id%.cmd")
 echo >>"%vbsfile%"    objFSO.DeleteFile(%fileattach%)
 echo >>"%vbsfile%"    objFSO.DeleteFile("%syncdir%\tmpbody-%id%.txt")
 echo >>"%vbsfile%" Else
