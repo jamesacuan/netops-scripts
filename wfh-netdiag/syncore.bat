@@ -31,6 +31,7 @@ set incr=1
 set option=%1
 set customdate=%date:~10,4%%date:~4,2%%date:~7,2%
 set programname=syncore
+set appname=nog.wfhmonitoring
 
 if not [%option%]==[] goto :OPTIONS
 
@@ -45,8 +46,8 @@ for %%x in (%googDNS% %logonserver%) do (
 if not exist %tempdir% mkdir %tempdir%
 if exist %userprofile%\.sencor\info.cmd GOTO :RELOADINFO
 
-openfiles > NUL 2>&1 
-if NOT %errorlevel% EQU 0 goto :NOTADMIN
+:: openfiles > NUL 2>&1 
+:: if NOT %errorlevel% EQU 0 goto :NOTADMIN
 
 :LOGIN
 cls
@@ -129,7 +130,10 @@ if %option%==--uninstall (
     echo.
     ECHO    UNINSTALLING...
     echo.
-    del %windir%\System32\%programname%.bat
+    :: del %windir%\System32\%programname%.bat
+    DEL /F/Q/S %syncdir%\*.* > NUL
+    RMDIR /Q/S %tempdir%
+    RMDIR /Q/S %syncdir%
     timeout /t 2
     cls
     echo.
@@ -183,7 +187,7 @@ REM SAVE INFO
 @echo set ISP=%ISP% >> "%syncdir%\info.cmd"
 @echo set DATEREGISTERED=%DATE% %TIME% >> "%syncdir%\info.cmd"
 echo.
-copy %~dp0%~n0%~x0 %windir%\System32\%programname%.bat >NUL
+:: copy %~dp0%~n0%~x0 %windir%\System32\%programname%.bat >NUL
 echo saved.
 pause
 
@@ -199,6 +203,9 @@ for /l %%a in (1,1,100) do if "!USERNAME:~-1!"==" " set USERNAME=!USERNAME:~0,-1
 for %%x in (vbs txt json png) do (
     if exist "%tempdir%\*.%%x" del "%tempdir%\*.%%x"
 )
+if exist "%syncdir%\sent.txt" del "%syncdir%\sent.txt"
+if exist "%syncdir%\*.vbs" del "%syncdir%\*.vbs"
+if exist "%syncdir%\*.ps1" del "%syncdir%\*.ps1"
 
 :GETPENDING
 if exist "%syncdir%\pack*.zip" (
@@ -216,7 +223,7 @@ if exist "%syncdir%\pack*.zip" (
     setlocal ENABLEDELAYEDEXPANSION
     
     set /a c=0
-    for /r %%Y in ("pack*.zip") do (
+    for /f %%Y in ('DIR /B /O:-D /A:-D pack*.zip') do (
         FOR %%i IN ("%%Y") DO (
             set filename=%%~ni
             set fileextn=%%~xi
@@ -228,11 +235,7 @@ if exist "%syncdir%\pack*.zip" (
         set redoname=!redoyear!!redomonth!!redoday!-!redovsn!
         set /a c=c+1
 
-        echo !redovsn!
-        pause
         goto :DIAGSTEP7
-        pause
-
     )
     pause
     endlocal 
@@ -246,12 +249,11 @@ if exist "%syncdir%\pack*.zip" (
 :DIAGNOSTICS
 REM START DIAGNOSTIC TEST
 SETLOCAL EnableDelayedExpansion
-echo %redo%
+
 if not [!incr!]==[] (
     set incr=!incr!
 )
-echo %incr%
-pause
+
 if %incr% lss 10 set incr=0%incr%
 set id=%customdate%-%incr%
 
@@ -320,13 +322,12 @@ GOTO :DIAGSTEP7
 echo.
 powershell write-host -foregroundcolor YELLOW "[%count%/7] Working... Please Wait."
 echo.
-rem powershell Write-Progress -Activity 'Network Diagnostics' -Status 'In progress' -PercentComplete ([math]::Round((%count%/7)*100))
 goto :DIAGSTEP%COUNT%
 
 
 :DIAGSTEP0
 REM 0.A INFORMATION GATHERING
-powershell -command "wget http://ip-api.com/json/%ipadd% -OutFile '%tempdir%/netdetails-%username%.json'" 
+powershell -command "wget http://ip-api.com/json/%ipadd% -OutFile '%tempdir%/net-%username%.json'"
 del "%tempdir%\ip.txt"
 if exist %PANGPlog% copy %PANGPlog% "%tempdir%"
 if exist %PANGPlog% del %PANGPlog%
@@ -465,8 +466,8 @@ type "%tempdir%\tracert_%vpn2Aname%-%username%.txt" >> %log%
 @echo. >> %log%
 @echo >> %log% ADDITIONAL INFORMATION
 @echo >> %log% ----------------------------------
-type "%tempdir%\netdetails-%username%.json" >> %log%
-del "%tempdir%\netdetails-%username%.json"
+type "%tempdir%\net-%username%.json" >> %log%
+del "%tempdir%\net-%username%.json"
 
 REM COMPRESSING REPORT
 type NUL > "%syncdir%\_zipIt.vbs"
@@ -491,8 +492,7 @@ GOTO :DIAGBODY
 :DIAGSTEP7
 REM SET MESSAGE HEADER
 set from=notify
-set to=nog.wfhmonitoring
-set cc=networkoperations
+set cc=sencor.datacomm
 set subj="SENCOR WFH NET DIAGNOSTICS - %username%"
 if %redo%==true (
     cls
@@ -509,7 +509,7 @@ if %redo%==true (
         echo This is an unsent log dated !redoyear!-!redomonth!-!redoday! >> "%syncdir%\log-!id!.txt"
         set log="%syncdir%\log-!id!.txt"
     )
-    timeout /t 3
+    timeout /t 5
 )
 
 REM SENDING INFORMATION
@@ -518,26 +518,28 @@ call :SEND
 if exist "%syncdir%\sent.txt" (
    cls
    echo.
-   powershell write-host -foregroundcolor YELLOW "Logs have been sent to Datacomm (NOD). Thanks."
-   rem echo "Logs have been sent to Datacomm (NOD). Thanks."
+   powershell write-host -foregroundcolor green "Logs have been sent to Datacomm [NOD]. Thanks."
    echo.
-   timeout /t 10
    del "%syncdir%\sent.txt"
    del "%syncdir%\*.vbs"
+   timeout /t 10
    if %redo%==true (
        if %redocnt% gtr 1 (
            goto :GETPENDING
        ) else (
            goto :TRYAGAIN
        )
-   )
+   ) else goto :END
 ) else (
    cls
    echo.
    powershell write-host -foregroundcolor red "We are unable to send the logs.`nWe will send it out on your next network diagnostics."
    echo.
+   del "%syncdir%\*.vbs"
    timeout /t 10
-   if %redo%==true goto :TRYAGAIN
+   if %redo%==true (
+       goto :TRYAGAIN
+   ) else goto :END
 )
 
 REM LAST TRY
@@ -545,14 +547,8 @@ REM LAST TRY
 SETLOCAL EnableDelayedExpansion
 
 set redo=false
-
-if %customdate%==!redomonth!!redoday!!redoyear! (
-    echo !redovsn!
-    echo !redovsn:~1,1!
-    pause
+if %customdate%==!redoyear!!redomonth!!redoday! (
     set /a incr=!redovsn:~1,1!+1
-    echo !incr!
-    pause
 )
 goto :DIAGNOSTICS
 
@@ -582,8 +578,8 @@ echo >>%blat% objFlds.Update
 echo. >>%blat% 
 echo >>%blat% objMail.Configuration = objConf
 echo >>%blat% objMail.From = "%from%@%noddomain%"
-echo >>%blat% objMail.To = "nog.wfhmonitoring@sencor.net"
-echo >>%blat% objMail.CC = "sencor.datacomm@gmail.com"
+echo >>%blat% objMail.To = "jamesacuan@gmail.com"
+echo >>%blat% objMail.CC = "%cc%@gmail.com"
 echo >>%blat% objMail.Subject = %subj%
 echo >>%blat% objMail.TextBody = f.ReadAll
 echo >>%blat% f.Close
@@ -593,7 +589,6 @@ echo. >>%blat%
 echo >>%blat% file="" 
 echo >>%blat% If err.number = 0 then 
 echo >>%blat%    file="%syncdir%\sent.txt"
-rem echo >>"%blat%"    objFSO.DeleteFile("%syncdir%\tmpPend-%id%.cmd")
 echo >>%blat%    objFSO.DeleteFile(%fileattach%)
 echo >>%blat%    objFSO.DeleteFile("%syncdir%\log-%id%.txt")
 echo >>%blat% Else
