@@ -578,7 +578,7 @@ echo >>%blat% objFlds.Update
 echo. >>%blat% 
 echo >>%blat% objMail.Configuration = objConf
 echo >>%blat% objMail.From = "%from%@%noddomain%"
-echo >>%blat% objMail.To = "jamesacuan@gmail.com"
+echo >>%blat% objMail.To = "%appname%@%domain%"
 echo >>%blat% objMail.CC = "%cc%@gmail.com"
 echo >>%blat% objMail.Subject = %subj%
 echo >>%blat% objMail.TextBody = f.ReadAll
